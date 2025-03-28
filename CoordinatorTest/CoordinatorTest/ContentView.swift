@@ -31,9 +31,10 @@ struct RootView: View {
     }
 }
 
+#warning("Warning 2 - I need a better alternative to: '(Int) -> Void'. How wold it look like in the case of multiple completion blocks?")
 enum Screen: Hashable {
     case first
-    case second(initialValue: Int, callbacks: SecondScreenViewModel.Callbacks)
+    case second(initialValue: Int, callback: (Int) -> Void)
     
     static func == (lhs: Screen, rhs: Screen) -> Bool {
         switch (lhs, rhs) {
@@ -76,11 +77,12 @@ final class MainCoordinator {
         switch screen {
         case .first:
             buildFirstScreen()
-        case let .second(initialValue, callbacks):
-            buildSecondScreen(with: initialValue, callbacks: callbacks)
+        case let .second(initialValue, callback):
+            buildSecondScreen(with: initialValue, callback: callback)
         }
     }
     
+#warning("Warning 1 - 'buildFirstScreen' gets called each time the NavigationPath changes.")
     @ViewBuilder
     private func buildFirstScreen() -> some View {
         let output = FirstScreenViewModel.Output(onContinue: onContinue)
@@ -91,14 +93,9 @@ final class MainCoordinator {
     @ViewBuilder
     private func buildSecondScreen(
         with initialValue: Int,
-        callbacks: SecondScreenViewModel.Callbacks
+        callback: @escaping (Int) -> Void
     ) -> some View {
-        let output = SecondScreenViewModel.Output(
-            onConfirm: { [weak self] _, value in
-                callbacks.onConfirm(value)
-                self?.pop()
-            }
-        )
+        let output = makeSecondScreenOutput(callback: callback)
         let viewModel = SecondScreenViewModel(initialValue: initialValue, output: output)
         SecondScreen(viewModel: viewModel)
     }
@@ -106,18 +103,16 @@ final class MainCoordinator {
     private func onContinue(_ viewModel: FirstScreenViewModel,
                             _ selectedValue: Int,
                             _ updateValue: @escaping (Int) -> Void) -> Void {
-        let callbacks = makeSecondScreenCallbacks(update: updateValue)
-        push(.second(initialValue: selectedValue, callbacks: callbacks))
+        push(.second(initialValue: selectedValue, callback: updateValue))
     }
     
-    private func makeSecondScreenCallbacks(
-        update: @escaping (Int) -> Void
-    ) -> SecondScreenViewModel.Callbacks {
-        return SecondScreenViewModel.Callbacks(
-            onConfirm: { value in
-                update(value)
-            }
-        )
+#warning("Warning 3 - I don't like how the syntax looks. I would like to have matching syntax like I have 'onContinue'.")
+    private func makeSecondScreenOutput(callback: @escaping (Int) -> Void) -> SecondScreenViewModel.Output {
+        return SecondScreenViewModel.Output { [weak self] viewModel, selectedValue in
+            guard let self = self else { return }
+            callback(selectedValue)
+            self.pop()
+        }
     }
 }
 
@@ -152,6 +147,7 @@ struct FirstScreen: View {
 
 @Observable
 final class FirstScreenViewModel {
+#warning("Warning 4 - Should I use typealias for: '(Int) -> Void'?")
     struct Output {
         let onContinue: (_ viewModel: FirstScreenViewModel,
                          _ selectedValue: Int,
@@ -214,10 +210,6 @@ struct SecondScreen: View {
 final class SecondScreenViewModel {
     struct Output {
         let onConfirm: (_ viewModel: SecondScreenViewModel, _ selectedValue: Int) -> Void
-    }
-    
-    struct Callbacks {
-        let onConfirm: (Int) -> Void
     }
     
     var selectedValue: Int
